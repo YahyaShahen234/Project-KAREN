@@ -1,0 +1,14 @@
+[project]
+name = "karen"
+version = "0.1.0"
+description = "Karen voice assistant (Pi 5 MVP)"
+requires-python = ">=3.11"
+dependencies = [
+"sounddevice",
+"numpy",
+"pydantic",
+"pynput",
+"pyyaml",
+"requests",
+"websockets",
+]
