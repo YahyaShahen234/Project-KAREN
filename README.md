@@ -1,2 +1,2 @@
 # Project-KAREN
-Karen plankton AI model for realistic karen bot
+Karen plankton AI model for real life bot
