@@ -24,9 +24,9 @@ class Settings(BaseSettings):
     # Thinking fillers
     FILLERS: list[str] = [
         "mhmm…",
-        "let’s see…",
-        "just a sec…",
-        "thinking…",
+        "mmmmmm",
+        "uhhhh",
+        "hold on…",
         "one moment…",
     ]
     FILLER_MIN_S: float = 2.5
