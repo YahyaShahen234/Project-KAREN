@@ -13,4 +13,5 @@ dependencies = [
 "requests",
 "websockets",
 "openai",
+"openwakeword",
 ]
