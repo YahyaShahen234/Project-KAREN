@@ -1,12 +1,15 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # Swap these to real providers when ready
-    STT_PROVIDER: str = "openai"      # "openai" | "deepgram" | etc
-    LLM_PROVIDER: str = "openai"      # "openai" | "anthropic" | etc
-    TTS_PROVIDER: str = "openai"      # "openai" | "azure" | "elevenlabs"
+    """Runtime configuration for Karen assistant.
+    Values can be overridden via environment variables or karen.env file.
+    """
+    # Providers
+    STT_PROVIDER: str = "openai"      # "openai" | "deepgram" | "stub"
+    LLM_PROVIDER: str = "openai"      # "openai" | "anthropic" | "stub"
+    TTS_PROVIDER: str = "openai"      # "openai" | "azure" | "elevenlabs" | "stub"
 
-    # API keys (only used when provider != stub)
+    # API keys
     OPENAI_API_KEY: str | None = None
     DEEPGRAM_API_KEY: str | None = None
     AZURE_SPEECH_KEY: str | None = None
@@ -16,12 +19,13 @@ class Settings(BaseSettings):
     # Audio
     SAMPLE_RATE: int = 16000
     CHANNELS: int = 1
-    MAX_SEC: int = 12
 
     # Wake word
-    WAKEWORD: str = "karen"
+    WAKE_THRESHOLD: float = 0.5
+    WAKE_TRIGGER_LEVEL: int = 3
+    WAKE_COOLDOWN_S: float = 2.0
 
-    # Thinking fillers
+    # Filler speech
     FILLERS: list[str] = [
         "mhmm…",
         "hmmmmmm",
