@@ -1,6 +1,6 @@
 import asyncio
 from .audio_io import Mic, Speaker
-from .wake import WakeService
+from .wake import WakeWordService  # <-- wake word (openWakeWord/Porcupine-compatible)
 from .stt import STT
 from .llm import LLM
 from .tts import TTS
@@ -8,14 +8,20 @@ from .ui import UI
 from .netwatch import NetWatch
 from .filler import Filler
 
-async def run_turn(ui, mic, spk, stt, llm, tts):
+async def run_turn(ui: UI, spk: Speaker, stt: STT, llm: LLM, tts: TTS):
+    # We open Mic() only for the speech turn (so it doesn't fight the wake listener).
     ui.set_state("listening")
-    audio = await mic.capture_until_silence(max_sec=12)
+    async with Mic() as mic:
+        audio = await mic.capture_until_silence(max_sec=12, silence_ms=700, thresh=0.01)
+        rate = getattr(mic, "rate", 16000)
+
     ui.set_state("transcribing")
-    text = await stt.transcribe(audio)
+    # STT expects (audio, rate)
+    text = await stt.transcribe((audio, rate))
     if not text:
         ui.toast("didn't catch that")
         return
+
     ui.show_user(text)
 
     # Start filler while waiting for LLM
@@ -30,28 +36,39 @@ async def run_turn(ui, mic, spk, stt, llm, tts):
 
     ui.set_state("speaking")
     ui.show_karen(reply)
+
     async for chunk in tts.stream(reply):
         await spk.play_pcm(chunk)
 
 async def main():
     ui = UI()
     net = NetWatch()
-    async with Mic() as mic, Speaker() as spk, STT() as stt, LLM() as llm, TTS() as tts, WakeService() as wake:
+
+    # Keep Speaker/STT/LLM/TTS and the WakeWordService open across turns.
+    async with Speaker() as spk, STT() as stt, LLM() as llm, TTS() as tts, WakeWordService() as wake:
         ui.set_state("idle")
         while True:
             ok = await net.ok()
-            ui.set_net_ok(ok) if hasattr(ui, 'set_net_ok') else None
+            if hasattr(ui, "set_net_ok"):
+                ui.set_net_ok(ok)
             if not ok:
                 ui.toast("network down — waiting…")
                 await asyncio.sleep(1.0)
                 continue
+
+            # Block here until the wake phrase is detected (e.g., "hey karen")
             await wake.wait()
             ui.ping()
+
             try:
-                await run_turn(ui, mic, spk, stt, llm, tts)
+                # Release the wake mic so our STT capture can take exclusive control
+                await wake.pause()
+                await run_turn(ui, spk, stt, llm, tts)
             except Exception as e:
                 ui.error(str(e))
             finally:
+                # Re-arm wake listening for the next turn
+                await wake.resume()
                 ui.set_state("idle")
 
 if __name__ == "__main__":
