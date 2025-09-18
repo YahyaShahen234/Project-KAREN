@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Swap these to real providers when ready
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     FILLER_MAX_S: float = 4.0
 
     class Config:
-        env_file = "/etc/karen.env"
+        env_file = "karen.env"
         env_file_encoding = "utf-8"
 
 settings = Settings()
