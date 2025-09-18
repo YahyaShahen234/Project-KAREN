@@ -1,24 +1,20 @@
 import numpy as np
+from typing import AsyncGenerator
 import openai
 from .config import settings
 
 def resample(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
-    """Ugly resampling using numpy.interp. Good enough for this."""
+    """Simple linear resampler using numpy.interp."""
     if from_rate == to_rate or len(audio) == 0:
-        return audio
-
+        return audio.astype(np.float32, copy=False)
     secs = len(audio) / from_rate
-    samps = int(secs * to_rate)
+    samps = max(int(secs * to_rate), 0)
     if samps == 0:
         return np.array([], dtype=np.float32)
-
-    resampled_audio = np.interp(
-        np.linspace(0, 1, samps, endpoint=False),      # New sample points
-        np.linspace(0, 1, len(audio), endpoint=False), # Old sample points
-        audio
-    )
-    return resampled_audio.astype(np.float32)
-
+    x_old = np.linspace(0.0, 1.0, len(audio), endpoint=False, dtype=np.float64)
+    x_new = np.linspace(0.0, 1.0, samps, endpoint=False, dtype=np.float64)
+    y = np.interp(x_new, x_old, audio.astype(np.float32))
+    return y.astype(np.float32)
 
 class TTS:
     client: openai.AsyncOpenAI | None = None
@@ -34,35 +30,28 @@ class TTS:
         if self.client:
             await self.client.close()
 
-    async def stream(self, text: str):
-        if settings.TTS_PROVIDER == "stub":
-            sr = settings.SAMPLE_RATE
-            t = np.linspace(0, 0.5, int(sr * 0.5), endpoint=False)
-            tone = 0.1 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
-            yield tone
-            return
-
+    async def stream(self, text: str) -> AsyncGenerator[np.ndarray, None]:
+        """Yield PCM chunks (float32, mono, [-1,1]) at settings.SAMPLE_RATE."""
         if settings.TTS_PROVIDER == "openai":
-            if not self.client:
-                raise ConnectionError("OpenAI client not initialized")
-
-            response = await self.client.audio.speech.with_streaming_response.create(
-                model=settings.OPENAI_TTS_MODEL or "gpt-4o-mini-tts",
-                voice="sage",   # normal Sage voice
+            assert self.client is not None
+            # Request raw PCM (24kHz, 16-bit mono). We'll chunk and resample.
+            resp = await self.client.audio.speech.create(
+                model="gpt-4o-mini-tts",
+                voice="sage",
                 input=text,
-                response_format="pcm",  # 24kHz, 16-bit, mono
+                response_format="pcm",
             )
-
-            async for chunk_bytes in response.iter_bytes(chunk_size=1024):
-                if not chunk_bytes:
+            pcm_bytes: bytes = resp.read() if hasattr(resp, "read") else bytes(resp)  # type: ignore
+            # Slice into frames of ~50 ms at 24kHz
+            frame_samples = int(0.05 * 24000)
+            sample_width = 2  # int16
+            step = frame_samples * sample_width
+            for i in range(0, len(pcm_bytes), step):
+                frame = pcm_bytes[i:i+step]
+                if not frame:
                     continue
-                # Convert 16-bit PCM bytes to float32 numpy array
-                audio_24k = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-
-                # Resample to match your target SAMPLE_RATE (usually 16kHz)
+                audio_24k = np.frombuffer(frame, dtype=np.int16).astype(np.float32) / 32768.0
                 audio_out = resample(audio_24k, from_rate=24000, to_rate=settings.SAMPLE_RATE)
-
                 yield audio_out
             return
-
         raise NotImplementedError(f"TTS provider '{settings.TTS_PROVIDER}' not implemented")
