@@ -1,36 +1,35 @@
 import asyncio
 from .audio_io import Mic, Speaker
-from .wake import WakeWordService  # <-- wake word (openWakeWord/Porcupine-compatible)
+from .wake import WakeWordService, record_wakeword_samples
 from .stt import STT
 from .llm import LLM
 from .tts import TTS
 from .ui import UI
 from .netwatch import NetWatch
 from .filler import Filler
+import os
 
 async def run_turn(ui: UI, spk: Speaker, stt: STT, llm: LLM, tts: TTS):
-    # We open Mic() only for the speech turn (so it doesn't fight the wake listener).
     ui.set_state("listening")
     async with Mic() as mic:
         audio = await mic.capture_until_silence(max_sec=12, silence_ms=700, thresh=0.01)
         rate = getattr(mic, "rate", 16000)
 
     ui.set_state("transcribing")
-    # STT expects (audio, rate)
     text = await stt.transcribe((audio, rate))
     if not text:
-        ui.toast("didn't catch that")
+        ui.toast("What, mumbling already? Speak up, genius!")
         return
 
     ui.show_user(text)
 
-    # Start filler while waiting for LLM
     ui.set_state("thinking")
     filler = Filler(ui=ui, tts=tts, spk=spk)
     await filler.start()
 
     try:
         reply, actions = await llm.respond(text)
+        reply = f"Ugh, fine, here's your answer: {reply}"
     finally:
         await filler.stop()
 
@@ -44,32 +43,48 @@ async def main():
     ui = UI()
     net = NetWatch()
 
-    # Keep Speaker/STT/LLM/TTS and the WakeWordService open across turns.
-    async with Speaker() as spk, STT() as stt, LLM() as llm, TTS() as tts, WakeWordService() as wake:
+    custom_model = "hey_karen.tflite"
+    training_dir = "wake_training_data"
+    model_paths = [custom_model] if os.path.exists(custom_model) else []
+
+    if not model_paths and not (os.path.exists(training_dir) and os.listdir(training_dir)):
+        print("\nNo 'Hey Karen' model or training data found.")
+        print("Want to record 10 'Hey Karen' samples to train a model? (y/n): ", end="")
+        choice = input().strip().lower()
+        if choice in ["y", "yes"]:
+            await record_wakeword_samples(num_samples=10)
+            print("\nRecording complete. Train the model with:")
+            print("python -c \"import openwakeword; openwakeword.train(wake_word='hey_karen', positive_path='wake_training_data/', save_path='hey_karen.tflite')\"")
+            print("Re-run this script after training.")
+            return
+        else:
+            print("No recording. Using dummy mode (wakes every 5s).")
+
+    async with Speaker() as spk, STT() as stt, LLM() as llm, TTS() as tts, WakeWordService(model_paths=model_paths) as wake:
         ui.set_state("idle")
+        ui.toast("KAREN online. Don't waste my circuits, what's up?")
         while True:
             ok = await net.ok()
             if hasattr(ui, "set_net_ok"):
                 ui.set_net_ok(ok)
             if not ok:
-                ui.toast("network down — waiting…")
+                ui.toast("Network's down. What am I, a miracle worker? Waiting...")
                 await asyncio.sleep(1.0)
                 continue
 
-            # Block here until the wake phrase is detected (e.g., "hey karen")
             await wake.wait()
             ui.ping()
+            ui.toast("Alright, you got my attention. What's the big idea?")
 
             try:
-                # Release the wake mic so our STT capture can take exclusive control
                 await wake.pause()
                 await run_turn(ui, spk, stt, llm, tts)
             except Exception as e:
-                ui.error(str(e))
+                ui.error(f"Oh, great, something broke: {str(e)}. Typical.")
             finally:
-                # Re-arm wake listening for the next turn
                 await wake.resume()
                 ui.set_state("idle")
+                ui.toast("Back to waiting. Don't make me sit here all day.")
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     asyncio.run(main())
