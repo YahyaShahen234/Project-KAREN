@@ -44,7 +44,165 @@ class WakeWordService:
             while True:
                 await wake.wait()   # blocks until wake word
                 await wake.pause()  # release mic for STT
-                # ... run STT/LLM/TTS ...
+                # 
+try:
+    from .config import settings  # optional
+    DEFAULT_THRESHOLD = settings.WAKE_THRESHOLD
+    DEFAULT_TRIGGER = settings.WAKE_TRIGGER_LEVEL
+    DEFAULT_COOLDOWN = settings.WAKE_COOLDOWN_S
+except Exception:
+    DEFAULT_THRESHOLD = 0.5
+    DEFAULT_TRIGGER = 3
+    DEFAULT_COOLDOWN = 2.0
+
+class WakeWordService:
+    def __init__(self, models: list[str] | None = None, threshold: float = DEFAULT_THRESHOLD,
+                 trigger_level: int = DEFAULT_TRIGGER, cooldown_s: float = DEFAULT_COOLDOWN,
+                 rate: int = 16000):
+        self.models = models or ["hey_karen"]
+        self.threshold = threshold
+        self.trigger_level = trigger_level
+        self.cooldown_s = cooldown_s
+        self.rate = rate
+        self._event = asyncio.Event()
+        self._last_trigger_ts = 0.0
+        self._task: asyncio.Task | None = None
+
+    async def __aenter__(self):
+        loop = asyncio.get_running_loop()
+        self._task = loop.create_task(self._listen_loop())
+        return self
+
+    async def __aexit__(self, *a):
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except Exception:
+                pass
+            self._task = None
+
+    async def wait(self):
+        await self._event.wait()
+        self._event.clear()
+
+    async def pause(self):
+        # Not fully implemented; cancel listening until resumed
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except Exception:
+                pass
+            self._task = None
+
+    async def resume(self):
+        if not self._task:
+            loop = asyncio.get_running_loop()
+            self._task = loop.create_task(self._listen_loop())
+
+    async def _listen_loop(self):
+        # Simple CPU microphone listener using sounddevice + openwakeword
+        import sounddevice as sd
+        model = Model()
+        block = int(self.rate * 0.1)
+        streak = 0
+        with sd.InputStream(samplerate=self.rate, channels=1, dtype='float32') as stream:
+            while True:
+                audio = stream.read(block)[0][:,0]
+                scores = model.predict(audio)
+                max_score = max(scores.values()) if scores else 0.0
+                if max_score >= self.threshold:
+                    streak += 1
+                else:
+                    streak = max(0, streak - 1)
+                if streak >= self.trigger_level:
+                    now = time.monotonic()
+                    if now - self._last_trigger_ts >= self.cooldown_s:
+                        self._last_trigger_ts = now
+                        streak = 0
+                        loop = asyncio.get_running_loop()
+                        loop.call_soon_threadsafe(self._event.set)
+ run STT/LLM/TTS 
+try:
+    from .config import settings  # optional
+    DEFAULT_THRESHOLD = settings.WAKE_THRESHOLD
+    DEFAULT_TRIGGER = settings.WAKE_TRIGGER_LEVEL
+    DEFAULT_COOLDOWN = settings.WAKE_COOLDOWN_S
+except Exception:
+    DEFAULT_THRESHOLD = 0.5
+    DEFAULT_TRIGGER = 3
+    DEFAULT_COOLDOWN = 2.0
+
+class WakeWordService:
+    def __init__(self, models: list[str] | None = None, threshold: float = DEFAULT_THRESHOLD,
+                 trigger_level: int = DEFAULT_TRIGGER, cooldown_s: float = DEFAULT_COOLDOWN,
+                 rate: int = 16000):
+        self.models = models or ["hey_karen"]
+        self.threshold = threshold
+        self.trigger_level = trigger_level
+        self.cooldown_s = cooldown_s
+        self.rate = rate
+        self._event = asyncio.Event()
+        self._last_trigger_ts = 0.0
+        self._task: asyncio.Task | None = None
+
+    async def __aenter__(self):
+        loop = asyncio.get_running_loop()
+        self._task = loop.create_task(self._listen_loop())
+        return self
+
+    async def __aexit__(self, *a):
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except Exception:
+                pass
+            self._task = None
+
+    async def wait(self):
+        await self._event.wait()
+        self._event.clear()
+
+    async def pause(self):
+        # Not fully implemented; cancel listening until resumed
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except Exception:
+                pass
+            self._task = None
+
+    async def resume(self):
+        if not self._task:
+            loop = asyncio.get_running_loop()
+            self._task = loop.create_task(self._listen_loop())
+
+    async def _listen_loop(self):
+        # Simple CPU microphone listener using sounddevice + openwakeword
+        import sounddevice as sd
+        model = Model()
+        block = int(self.rate * 0.1)
+        streak = 0
+        with sd.InputStream(samplerate=self.rate, channels=1, dtype='float32') as stream:
+            while True:
+                audio = stream.read(block)[0][:,0]
+                scores = model.predict(audio)
+                max_score = max(scores.values()) if scores else 0.0
+                if max_score >= self.threshold:
+                    streak += 1
+                else:
+                    streak = max(0, streak - 1)
+                if streak >= self.trigger_level:
+                    now = time.monotonic()
+                    if now - self._last_trigger_ts >= self.cooldown_s:
+                        self._last_trigger_ts = now
+                        streak = 0
+                        loop = asyncio.get_running_loop()
+                        loop.call_soon_threadsafe(self._event.set)
+
                 await wake.resume() # re-arm
     """
     def __init__(
