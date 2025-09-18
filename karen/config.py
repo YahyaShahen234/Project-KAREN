@@ -2,9 +2,9 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Swap these to real providers when ready
-    STT_PROVIDER: str = "stub"      # "openai" | "deepgram" | etc
-    LLM_PROVIDER: str = "stub"      # "openai" | "anthropic" | etc
-    TTS_PROVIDER: str = "stub"      # "openai" | "azure" | "elevenlabs"
+    STT_PROVIDER: str = "openai"      # "openai" | "deepgram" | etc
+    LLM_PROVIDER: str = "openai"      # "openai" | "anthropic" | etc
+    TTS_PROVIDER: str = "openai"      # "openai" | "azure" | "elevenlabs"
 
     # API keys (only used when provider != stub)
     OPENAI_API_KEY: str | None = None
@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     # Thinking fillers
     FILLERS: list[str] = [
         "mhmm…",
-        "mmmmmm",
-        "uhhhh",
+        "hmmmmmm",
+        "uuuuuuh",
         "hold on…",
         "one moment…",
     ]
