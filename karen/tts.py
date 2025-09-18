@@ -4,7 +4,7 @@ from .config import settings
 
 def resample(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
     """Ugly resampling using numpy.interp. Good enough for this."""
-    if from_rate == to_rate:
+    if from_rate == to_rate or len(audio) == 0:
         return audio
 
     secs = len(audio) / from_rate
@@ -47,10 +47,10 @@ class TTS:
                 raise ConnectionError("OpenAI client not initialized")
 
             response = await self.client.audio.speech.with_streaming_response.create(
-                model="tts-1",
-                voice="alloy",
+                model=settings.OPENAI_TTS_MODEL or "gpt-4o-mini-tts",
+                voice="sage",   # normal Sage voice
                 input=text,
-                response_format="pcm", # 24kHz, 16-bit, mono
+                response_format="pcm",  # 24kHz, 16-bit, mono
             )
 
             async for chunk_bytes in response.iter_bytes(chunk_size=1024):
@@ -59,10 +59,10 @@ class TTS:
                 # Convert 16-bit PCM bytes to float32 numpy array
                 audio_24k = np.frombuffer(chunk_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
-                # Resample to 16kHz
-                audio_16k = resample(audio_24k, from_rate=24000, to_rate=settings.SAMPLE_RATE)
+                # Resample to match your target SAMPLE_RATE (usually 16kHz)
+                audio_out = resample(audio_24k, from_rate=24000, to_rate=settings.SAMPLE_RATE)
 
-                yield audio_16k
+                yield audio_out
             return
 
         raise NotImplementedError(f"TTS provider '{settings.TTS_PROVIDER}' not implemented")
