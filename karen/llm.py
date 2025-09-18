@@ -11,7 +11,6 @@ SYSTEM_PROMPT = (
     "you've had it... because you have."
 )
 
-
 class LLM:
     client: openai.AsyncOpenAI | None = None
 
@@ -26,26 +25,18 @@ class LLM:
         if self.client:
             await self.client.close()
 
-    async def respond(self, text: str):
-        if settings.LLM_PROVIDER == "stub":
-            reply = f"You said: {text}. Also, it's a lovely day to optimize latency."
-            actions = []
-            return reply, actions
-
+    async def reply(self, text: str):
         if settings.LLM_PROVIDER == "openai":
-            if not self.client:
-                raise ConnectionError("OpenAI client not initialized")
-
+            assert self.client is not None
             res = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": text},
                 ],
-                max_tokens=150,
+                max_tokens=180,
             )
-            reply = res.choices[0].message.content
-            actions = []
+            reply = res.choices[0].message.content or ""
+            actions: list[dict] = []
             return reply, actions
-
         raise NotImplementedError(f"LLM provider '{settings.LLM_PROVIDER}' not implemented")
