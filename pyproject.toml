@@ -7,8 +7,11 @@ dependencies = [
 "sounddevice",
 "numpy",
 "pydantic",
+"pydantic-settings",
 "pynput",
 "pyyaml",
 "requests",
 "websockets",
+"openai",
+"openwakeword",
 ]
